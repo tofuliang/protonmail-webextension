@@ -1,0 +1,40 @@
+name: build crx
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.event.repository.owner.id == github.event.sender.id
+    steps:
+      - uses: actions/checkout@master
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: npm install, build
+        env:
+          PRIVATE_KEY: ${{ secrets.buildPem }}
+        run: |
+          npm install -g crx3
+          cat <<< $PRIVATE_KEY > ~/build.pem
+          npm i && npm run build:chromium
+          cp build/manifest.json ~/manifest.json
+          mkdir dist||true;
+          cd dist;
+          sed '2 i    "update_url": "https://github.com/tofuliang/protonmail-webextension/master/dist/update.xml",' ~/manifest.json|jq > ../build/manifest.json
+          npx crx3 -p ~/build.pem -o protonmail.crx -x update.xml --crxURL https://github.com/tofuliang/protonmail-webextension/master/dist/ImproveYouTube.crx ../build
+      - name: Set git identity
+        run: |
+          git config --global user.email "tofuliang@gmail.com"
+          git config --global user.name "tofuliang"
+          git add dist
+          git commit -m "update crx"
+          git push
+      - name: 失败调试
+        uses: P3TERX/ssh2actions@main
+        if: ${{ failure() }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
